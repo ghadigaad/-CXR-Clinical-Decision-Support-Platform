@@ -1,0 +1,17 @@
+# EfficientNetV2B0 inference service (TensorFlow/Keras).
+# Kept separate from ai-service/requirements.txt: TensorFlow and PyTorch pin
+# incompatible numpy ranges and cannot share a virtual environment.
+# Python 3.11 required - TensorFlow has no 3.12+ wheels on Windows.
+#
+# Versions below are the resolved set this service was verified against.
+
+tensorflow==2.20.0
+keras==3.13.2
+numpy==2.4.6
+pillow==12.3.0
+
+fastapi==0.115.6
+uvicorn[standard]==0.34.0
+python-multipart==0.0.20
+pydantic==2.13.4
+pydantic-settings==2.7.1

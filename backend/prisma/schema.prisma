@@ -1,0 +1,200 @@
+// Prisma schema for the CXR clinical decision support platform.
+//
+// Development uses SQLite. To move to Postgres, change the provider below to
+// "postgresql", point DATABASE_URL at the server, and re-run `prisma db push`.
+// The only SQLite-specific concession is that JSON payloads are stored as strings
+// (see the *Json fields), which keeps the schema portable across both engines.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  DOCTOR
+  ADMIN
+}
+
+enum Gender {
+  MALE
+  FEMALE
+  OTHER
+  UNDISCLOSED
+}
+
+enum AnalysisStatus {
+  PENDING_REVIEW
+  REVIEWED
+  FINALIZED
+}
+
+enum RiskLevel {
+  LOW
+  MODERATE
+  HIGH
+}
+
+model Doctor {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String
+  fullName     String
+  specialty    String?
+  licenseId    String?
+  role         Role     @default(DOCTOR)
+  isActive     Boolean  @default(true)
+  lastLoginAt  DateTime?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  patients  Patient[]
+  analyses  Analysis[]
+  reviews   Review[]
+  auditLogs AuditLog[]
+
+  @@index([email])
+}
+
+model Patient {
+  id String @id @default(cuid())
+
+  // Clinician-facing identifier (e.g. hospital MRN). Unique per doctor rather than
+  // globally, so two clinics using the same numbering scheme do not collide.
+  medicalRecordNumber String
+  fullName            String
+  age                 Int
+  gender              Gender
+  dateOfBirth         DateTime?
+
+  clinicalHistory String?
+  symptoms        String?
+  notes           String?
+
+  doctorId String
+  doctor   Doctor @relation(fields: [doctorId], references: [id], onDelete: Cascade)
+
+  analyses Analysis[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([doctorId, medicalRecordNumber])
+  @@index([doctorId, createdAt])
+  @@index([fullName])
+}
+
+model Analysis {
+  id String @id @default(cuid())
+
+  patientId String
+  patient   Patient @relation(fields: [patientId], references: [id], onDelete: Cascade)
+
+  doctorId String
+  doctor   Doctor @relation(fields: [doctorId], references: [id])
+
+  status AnalysisStatus @default(PENDING_REVIEW)
+
+  // --- Model output ---
+  predictedLabel String
+  predictedIndex Int
+  confidence     Float
+  // JSON array of { label, classIndex, probability }, serialized for SQLite portability.
+  probabilitiesJson String
+  modelVersion      String
+  processingTimeMs  Int
+  // "model" for real inference, "mock" for the development stub. Surfaced in the UI so
+  // mock output is never mistaken for a real prediction.
+  source String @default("model")
+
+  // --- System-derived, not model output ---
+  riskLevel RiskLevel
+
+  // --- Imaging (retention is configurable; see STORE_* env vars) ---
+  imageMimeType   String
+  imageWidth      Int
+  imageHeight     Int
+  imageByteSize   Int
+  // SHA-256 of the uploaded bytes: lets history prove which image produced a result
+  // even in deployments that retain no pixels at all.
+  imageChecksum   String
+  // Small preview for history lists.
+  thumbnailDataUrl String?
+  // Larger rendition used by the viewer and the report. Still a downscale, not the
+  // original diagnostic-resolution file.
+  displayImageDataUrl String?
+  heatmapDataUrl   String?
+  originalImagePath String?
+
+  report Report?
+  review Review?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([doctorId, createdAt])
+  @@index([patientId, createdAt])
+  @@index([status])
+  @@index([predictedLabel])
+}
+
+model Report {
+  id String @id @default(cuid())
+
+  analysisId String   @unique
+  analysis   Analysis @relation(fields: [analysisId], references: [id], onDelete: Cascade)
+
+  impression String
+  // JSON string arrays. Recommendations stay empty unless the model supplies them.
+  observationsJson     String @default("[]")
+  recommendationsJson  String @default("[]")
+
+  finalizedAt DateTime?
+  // Snapshot of the signing clinician at finalization time, so the report stays
+  // accurate even if the account is later renamed or deactivated.
+  finalizedByName String?
+  finalizedById   String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Review {
+  id String @id @default(cuid())
+
+  analysisId String   @unique
+  analysis   Analysis @relation(fields: [analysisId], references: [id], onDelete: Cascade)
+
+  doctorId String
+  doctor   Doctor @relation(fields: [doctorId], references: [id])
+
+  comments          String?
+  additionalFindings String?
+  finalAssessment   String?
+  agreesWithAi      Boolean?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model AuditLog {
+  id String @id @default(cuid())
+
+  doctorId String?
+  doctor   Doctor? @relation(fields: [doctorId], references: [id], onDelete: SetNull)
+
+  action     String
+  entityType String
+  entityId   String?
+  // Never store PHI here - only identifiers and outcome metadata.
+  metadataJson String?
+  ipAddress    String?
+
+  createdAt DateTime @default(now())
+
+  @@index([doctorId, createdAt])
+  @@index([entityType, entityId])
+}

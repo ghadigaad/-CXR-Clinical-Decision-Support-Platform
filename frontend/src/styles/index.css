@@ -1,0 +1,135 @@
+@import 'tailwindcss';
+
+/**
+ * Design tokens.
+ *
+ * The palette is deliberately restrained: a single clinical blue for interactive
+ * elements, slate for structure, and saturated colour reserved exclusively for risk and
+ * status signalling so it never competes with the interface for attention.
+ */
+@theme {
+  --color-clinical-50: #eff6ff;
+  --color-clinical-100: #dbeafe;
+  --color-clinical-200: #bfdbfe;
+  --color-clinical-300: #93c5fd;
+  --color-clinical-400: #60a5fa;
+  --color-clinical-500: #3b82f6;
+  --color-clinical-600: #2563eb;
+  --color-clinical-700: #1d4ed8;
+  --color-clinical-800: #1e40af;
+  --color-clinical-900: #1e3a8a;
+
+  /* Distinct hue for anything AI-generated, so model output never visually blends
+     with clinician-entered content. */
+  --color-ai-50: #f5f3ff;
+  --color-ai-100: #ede9fe;
+  --color-ai-200: #ddd6fe;
+  --color-ai-300: #c4b5fd;
+  --color-ai-500: #8b5cf6;
+  --color-ai-600: #7c3aed;
+  --color-ai-700: #6d28d9;
+
+  --font-sans: 'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto,
+    'Helvetica Neue', Arial, sans-serif;
+
+  --radius-card: 0.75rem;
+}
+
+@layer base {
+  html {
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    @apply bg-slate-50 text-slate-900 antialiased;
+    font-family: var(--font-sans);
+  }
+
+  /* Visible focus for keyboard users on every interactive element. */
+  :focus-visible {
+    @apply outline-2 outline-offset-2 outline-clinical-600;
+  }
+
+  ::selection {
+    @apply bg-clinical-100 text-clinical-900;
+  }
+}
+
+@layer utilities {
+  .skip-link {
+    @apply sr-only;
+  }
+
+  .skip-link:focus {
+    @apply not-sr-only fixed left-4 top-4 z-50 rounded-md bg-clinical-700 px-4 py-2
+      text-sm font-semibold text-white shadow-lg;
+  }
+
+  /* Diagonal hatch marking mock/non-clinical output. */
+  .mock-hatch {
+    background-image: repeating-linear-gradient(
+      45deg,
+      rgb(251 191 36 / 0.12) 0,
+      rgb(251 191 36 / 0.12) 8px,
+      transparent 8px,
+      transparent 16px
+    );
+  }
+}
+
+/**
+ * Print styles for the clinical report.
+ *
+ * The browser print path is a first-class output, not a fallback: the report is laid out
+ * for A4/Letter, navigation and controls are removed, and sections are kept off page
+ * breaks so a printed record stays readable in a paper chart.
+ */
+@media print {
+  @page {
+    size: A4;
+    margin: 14mm 12mm;
+  }
+
+  html,
+  body {
+    background: #fff !important;
+  }
+
+  .no-print,
+  nav,
+  aside,
+  header button,
+  [data-print='hide'] {
+    display: none !important;
+  }
+
+  .print-container {
+    max-width: none !important;
+    padding: 0 !important;
+    margin: 0 !important;
+  }
+
+  .print-block {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  .print-page-break {
+    break-before: page;
+    page-break-before: always;
+  }
+
+  /* Card chrome wastes ink and adds nothing on paper. */
+  .print-flat {
+    box-shadow: none !important;
+    border-color: #cbd5e1 !important;
+  }
+
+  a[href]::after {
+    content: '';
+  }
+
+  img {
+    max-width: 100% !important;
+  }
+}

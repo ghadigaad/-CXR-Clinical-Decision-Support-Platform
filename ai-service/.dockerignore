@@ -1,0 +1,9 @@
+.venv
+__pycache__
+*.pyc
+*.pyo
+.env
+.env.*
+test-images
+*.md
+.pytest_cache

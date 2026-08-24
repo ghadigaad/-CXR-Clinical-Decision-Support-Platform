@@ -1,0 +1,61 @@
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+env/
+*.egg-info/
+
+# Model weights - never commit (upload them to Hugging Face Spaces separately)
+ai-service/weights/*
+!ai-service/weights/.gitkeep
+ai-service-tf/weights/*
+!ai-service-tf/weights/.gitkeep
+*.pt
+*.pth
+*.onnx
+*.ckpt
+*.keras
+*.h5
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Database
+*.db
+*.db-journal
+*.sqlite
+*.sqlite3
+
+# Build output
+dist/
+build/
+.vite/
+
+# Uploads (only present when STORE_ORIGINAL_IMAGES=true)
+backend/storage/
+
+# Sample CXRs fetched for the inference smoke test
+ai-service/test-images/
+
+# Logs
+*.log
+npm-debug.log*
+logs/
+
+# Editor / OS
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/*
+!.vscode/extensions.json
+
+# Notebook checkpoints
+.ipynb_checkpoints/

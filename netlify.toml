@@ -1,0 +1,13 @@
+[build]
+  base = "frontend"
+  command = "node scripts/write-redirects.mjs && npm run build"
+  publish = "dist"
+
+[build.environment]
+  NODE_VERSION = "20"
+  VITE_DEMO_MODE = "true"
+  VITE_API_BASE_URL = ""
+
+# /api proxy and SPA fallback are written to public/_redirects at build time
+# (see frontend/scripts/write-redirects.mjs). Do not add a /* rule here: it
+# would intercept /api before the generated proxy.

@@ -1,0 +1,47 @@
+# Blueprint for the Express API. Connect this repo in the Render dashboard
+# (New → Blueprint) or create a Web Service and paste the commands below.
+#
+# Secrets (DATABASE_URL, DIRECT_URL, JWT_SECRET, INTERNAL_API_TOKEN,
+# AI_SERVICE_URL, AI_EFFICIENTNET_URL, CORS_ORIGIN) must be set in the
+# dashboard — they are not stored here.
+
+services:
+  - type: web
+    name: cxr-api
+    runtime: node
+    plan: free
+    rootDir: backend
+    buildCommand: npm run prepare:prisma && npm install && npx prisma generate && npm run build
+    startCommand: npx prisma db push && npm start
+    healthCheckPath: /api/system/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PRISMA_PROVIDER
+        value: postgresql
+      - key: COOKIE_SECURE
+        value: "true"
+      - key: AI_PROVIDER
+        value: real
+      - key: AI_ENABLE_GRADCAM
+        value: "true"
+      - key: AI_REQUEST_TIMEOUT_MS
+        value: "25000"
+      - key: STORE_ORIGINAL_IMAGES
+        value: "false"
+      - key: STORE_THUMBNAILS
+        value: "true"
+      - key: DATABASE_URL
+        sync: false
+      - key: DIRECT_URL
+        sync: false
+      - key: JWT_SECRET
+        sync: false
+      - key: INTERNAL_API_TOKEN
+        sync: false
+      - key: AI_SERVICE_URL
+        sync: false
+      - key: AI_EFFICIENTNET_URL
+        sync: false
+      - key: CORS_ORIGIN
+        sync: false
