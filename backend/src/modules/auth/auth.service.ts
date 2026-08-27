@@ -1,12 +1,10 @@
 import type { Doctor, Role } from '@prisma/client';
-import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 
 import { env } from '../../config/env.js';
 import { prisma } from '../../config/prisma.js';
+import { supabaseAdmin } from '../../config/supabase.js';
 import { unauthorized } from '../../lib/errors.js';
-
-const BCRYPT_ROUNDS = 12;
 
 export interface SessionPayload {
   sub: string;
@@ -35,10 +33,6 @@ export function toPublicDoctor(doctor: Doctor): PublicDoctor {
   };
 }
 
-export function hashPassword(password: string): Promise<string> {
-  return bcrypt.hash(password, BCRYPT_ROUNDS);
-}
-
 export function signSession(doctor: Doctor): string {
   const payload: SessionPayload = { sub: doctor.id, role: doctor.role };
   return jwt.sign(payload, env.JWT_SECRET, {
@@ -54,22 +48,55 @@ export function verifySession(token: string): SessionPayload {
   }
 }
 
-export async function authenticate(email: string, password: string): Promise<Doctor> {
-  const doctor = await prisma.doctor.findUnique({
-    where: { email: email.toLowerCase().trim() },
+function displayNameFromEmail(email: string): string {
+  const local = email.split('@')[0] ?? 'clinician';
+  const spaced = local.replace(/[._-]+/g, ' ').trim();
+  if (!spaced) return 'Clinician';
+  return spaced.replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
+export async function requestEmailOtp(email: string): Promise<void> {
+  const { error } = await supabaseAdmin.auth.signInWithOtp({
+    email,
+    options: { shouldCreateUser: true },
   });
 
-  // Compare against a dummy hash when the account is missing so response timing does
-  // not reveal which email addresses are registered.
-  const hash = doctor?.passwordHash ?? '$2a$12$invalidinvalidinvalidinvalidinvalidinvalidinvalidinvalidin';
-  const matches = await bcrypt.compare(password, hash);
+  if (error) {
+    throw unauthorized(
+      'Could not send a sign-in code. Check the address and try again in a few minutes.',
+    );
+  }
+}
 
-  if (!doctor || !matches || !doctor.isActive) {
-    throw unauthorized('Incorrect email or password.');
+export async function verifyEmailOtp(email: string, token: string): Promise<Doctor> {
+  const { data, error } = await supabaseAdmin.auth.verifyOtp({
+    email,
+    token,
+    type: 'email',
+  });
+
+  if (error || !data.user?.email) {
+    throw unauthorized('That code is invalid or has expired. Request a new one.');
   }
 
-  return prisma.doctor.update({
-    where: { id: doctor.id },
-    data: { lastLoginAt: new Date() },
+  const normalized = data.user.email.toLowerCase().trim();
+
+  const doctor = await prisma.doctor.upsert({
+    where: { email: normalized },
+    update: { lastLoginAt: new Date(), isActive: true },
+    create: {
+      email: normalized,
+      fullName: displayNameFromEmail(normalized),
+      specialty: null,
+      role: 'DOCTOR',
+      passwordHash: '',
+      lastLoginAt: new Date(),
+    },
   });
+
+  if (!doctor.isActive) {
+    throw unauthorized('Your account is no longer active.');
+  }
+
+  return doctor;
 }

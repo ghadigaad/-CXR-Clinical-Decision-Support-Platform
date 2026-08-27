@@ -9,7 +9,7 @@ import { AI_DISCLAIMER, RISK_THRESHOLDS } from '../../services/reportBuilder.js'
 
 export const systemRouter = Router();
 
-/** Public: lets the sign-in page show a service banner before a session exists. */
+/** Public: liveness, plus unauthenticated OTP request/verify on /api/auth. */
 systemRouter.get('/health', (_req, res) => {
   res.json({ status: 'ok', uptimeSeconds: Math.floor(process.uptime()) });
 });

@@ -8,7 +8,8 @@ import type { Doctor } from '../types/api';
 interface AuthContextValue {
   doctor: Doctor | null;
   isLoading: boolean;
-  login: (email: string, password: string) => Promise<void>;
+  requestOtp: (email: string) => Promise<void>;
+  verifyOtp: (email: string, token: string) => Promise<void>;
   logout: () => Promise<void>;
 }
 
@@ -20,16 +21,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const { data, isLoading } = useQuery({
     queryKey: queryKeys.session,
     queryFn: authApi.me,
-    // A 401 here just means "not signed in", which is an expected state, not a failure
-    // worth retrying.
     retry: (failureCount, error) =>
       !(error instanceof ApiError && error.status === 401) && failureCount < 2,
     staleTime: 5 * 60 * 1000,
   });
 
-  const login = useCallback(
-    async (email: string, password: string) => {
-      const result = await authApi.login(email, password);
+  const requestOtp = useCallback(async (email: string) => {
+    await authApi.requestOtp(email);
+  }, []);
+
+  const verifyOtp = useCallback(
+    async (email: string, token: string) => {
+      const result = await authApi.verifyOtp(email, token);
       queryClient.setQueryData(queryKeys.session, result);
     },
     [queryClient],
@@ -39,15 +42,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       await authApi.logout();
     } finally {
-      // Drop every cached response on sign-out so patient data cannot linger in memory
-      // for the next person to use this browser.
       queryClient.clear();
     }
   }, [queryClient]);
 
   const value = useMemo<AuthContextValue>(
-    () => ({ doctor: data?.doctor ?? null, isLoading, login, logout }),
-    [data, isLoading, login, logout],
+    () => ({
+      doctor: data?.doctor ?? null,
+      isLoading,
+      requestOtp,
+      verifyOtp,
+      logout,
+    }),
+    [data, isLoading, requestOtp, verifyOtp, logout],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

@@ -41,7 +41,7 @@ enum RiskLevel {
 model Doctor {
   id           String   @id @default(cuid())
   email        String   @unique
-  passwordHash String
+  passwordHash String @default("")
   fullName     String
   specialty    String?
   licenseId    String?

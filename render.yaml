@@ -2,8 +2,8 @@
 # (New → Blueprint) or create a Web Service and paste the commands below.
 #
 # Secrets (DATABASE_URL, DIRECT_URL, JWT_SECRET, INTERNAL_API_TOKEN,
-# AI_SERVICE_URL, AI_EFFICIENTNET_URL, CORS_ORIGIN) must be set in the
-# dashboard — they are not stored here.
+# SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, AI_SERVICE_URL, AI_EFFICIENTNET_URL,
+# CORS_ORIGIN) must be set in the dashboard — they are not stored here.
 
 services:
   - type: web
@@ -11,12 +11,14 @@ services:
     runtime: node
     plan: free
     rootDir: backend
-    buildCommand: npm run prepare:prisma && npm install && npx prisma generate && npm run build
+    buildCommand: npm install --include=dev && npm run render:build
     startCommand: npx prisma db push && npm start
     healthCheckPath: /api/system/health
     envVars:
       - key: NODE_ENV
         value: production
+      - key: NPM_CONFIG_PRODUCTION
+        value: "false"
       - key: PRISMA_PROVIDER
         value: postgresql
       - key: COOKIE_SECURE
@@ -44,4 +46,8 @@ services:
       - key: AI_EFFICIENTNET_URL
         sync: false
       - key: CORS_ORIGIN
+        sync: false
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
         sync: false

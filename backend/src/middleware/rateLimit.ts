@@ -15,7 +15,7 @@ export const apiLimiter = rateLimit({
   message: rateLimitResponse,
 });
 
-/** Tight limit on credential submission to blunt password guessing. */
+/** Tight limit on code verification to blunt guessing. */
 export const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   limit: isProduction ? 10 : 50,
@@ -26,6 +26,20 @@ export const authLimiter = rateLimit({
     error: {
       code: 'RATE_LIMITED',
       message: 'Too many sign-in attempts. Please wait before trying again.',
+    },
+  },
+});
+
+/** Cap how often an address can request an email code (Supabase free mail is also capped). */
+export const otpLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: isProduction ? 5 : 30,
+  standardHeaders: 'draft-7',
+  legacyHeaders: false,
+  message: {
+    error: {
+      code: 'RATE_LIMITED',
+      message: 'Too many code requests. Please wait before asking for another email.',
     },
   },
 });

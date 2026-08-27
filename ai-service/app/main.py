@@ -94,6 +94,7 @@ def _validate_upload(data: bytes, content_type: str | None) -> None:
         )
 
 
+@app.get("/", response_model=HealthResponse, tags=["system"], include_in_schema=False)
 @app.get("/health", response_model=HealthResponse, tags=["system"])
 def health() -> HealthResponse:
     state = model_status()

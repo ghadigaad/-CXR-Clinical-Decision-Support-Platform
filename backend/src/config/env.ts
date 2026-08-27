@@ -41,6 +41,11 @@ const schema = z.object({
   DISPLAY_IMAGE_SIZE: z.coerce.number().int().min(256).max(4096).default(1024),
 
   LOG_LEVEL: z.enum(['debug', 'info', 'warn', 'error']).default('info'),
+
+  SUPABASE_URL: z.string().url('SUPABASE_URL must be the project URL from Settings → API'),
+  SUPABASE_SERVICE_ROLE_KEY: z
+    .string()
+    .min(20, 'SUPABASE_SERVICE_ROLE_KEY is required for email sign-in. Copy the service_role key from Settings → API. Never expose it to the browser.'),
 });
 
 const parsed = schema.safeParse(process.env);

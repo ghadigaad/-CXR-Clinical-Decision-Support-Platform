@@ -1,8 +1,6 @@
 /**
- * Creates the initial clinician account with a randomly generated password.
- *
- * The password is printed once and never stored in plain text anywhere, so there is no
- * default credential baked into the repository for an attacker to try.
+ * Optional helper to create a local clinician with a hashed password.
+ * The hosted demo uses email one-time codes instead; you do not need this for login.
  */
 import { randomBytes } from 'node:crypto';
 
@@ -14,6 +12,7 @@ const prisma = new PrismaClient();
 
 const ADMIN_EMAIL = process.env.SEED_EMAIL?.toLowerCase().trim() || 'clinician@example.org';
 const ADMIN_NAME = process.env.SEED_NAME || 'Dr. Alex Morgan';
+const FIXED_PASSWORD = process.env.SEED_PASSWORD?.trim() || '';
 
 function generatePassword(): string {
   // 18 bytes of base64url gives ~24 characters of high-entropy, typeable password.
@@ -29,7 +28,7 @@ async function main(): Promise<void> {
 
     if (!process.argv.includes('--reset')) return;
 
-    const password = generatePassword();
+    const password = FIXED_PASSWORD || generatePassword();
     await prisma.doctor.update({
       where: { id: existing.id },
       data: { passwordHash: await bcrypt.hash(password, 12) },
@@ -38,7 +37,7 @@ async function main(): Promise<void> {
     return;
   }
 
-  const password = generatePassword();
+  const password = FIXED_PASSWORD || generatePassword();
   await prisma.doctor.create({
     data: {
       email: ADMIN_EMAIL,

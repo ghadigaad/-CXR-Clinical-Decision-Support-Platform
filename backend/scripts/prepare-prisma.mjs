@@ -28,12 +28,27 @@ if (!schema.includes('provider = "sqlite"')) {
 
 schema = schema.replace('provider = "sqlite"', 'provider = "postgresql"');
 
-if (!schema.includes('directUrl')) {
+function isRemotePostgresUrl(value) {
+  if (!value) return false;
+  try {
+    const parsed = new URL(value.replace(/^postgres(ql)?:/i, 'http:'));
+    const host = (parsed.hostname || '').toLowerCase();
+    return host.length > 0 && host !== 'localhost' && host !== '127.0.0.1';
+  } catch {
+    return false;
+  }
+}
+
+// Only add directUrl when it is a real remote URL. A leftover localhost value
+// would make `prisma db push` ignore a correct DATABASE_URL.
+if (isRemotePostgresUrl(process.env.DIRECT_URL) && !schema.includes('directUrl')) {
   schema = schema.replace(
     'url      = env("DATABASE_URL")',
     'url       = env("DATABASE_URL")\n  directUrl = env("DIRECT_URL")',
   );
+  console.log('Prisma datasource switched to postgresql (with DIRECT_URL).');
+} else {
+  console.log('Prisma datasource switched to postgresql (DATABASE_URL only).');
 }
 
 writeFileSync(schemaPath, schema);
-console.log('Prisma datasource switched to postgresql (with DIRECT_URL).');

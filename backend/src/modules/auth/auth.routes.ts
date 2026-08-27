@@ -11,25 +11,49 @@ import {
   requireAuth,
   sessionCookieOptions,
 } from '../../middleware/auth.js';
-import { authLimiter } from '../../middleware/rateLimit.js';
-import { authenticate, signSession, toPublicDoctor } from './auth.service.js';
+import { authLimiter, otpLimiter } from '../../middleware/rateLimit.js';
+import { requestEmailOtp, signSession, toPublicDoctor, verifyEmailOtp } from './auth.service.js';
 
 const SESSION_MAX_AGE_MS = 8 * 60 * 60 * 1000;
 
-const loginSchema = z.object({
+const emailSchema = z.object({
   email: z.string().email('Enter a valid email address.'),
-  password: z.string().min(1, 'Password is required.'),
+});
+
+const verifySchema = z.object({
+  email: z.string().email('Enter a valid email address.'),
+  token: z
+    .string()
+    .trim()
+    .regex(/^\d{6,8}$/, 'Enter the code from your email.'),
 });
 
 export const authRouter = Router();
 
 authRouter.post(
-  '/login',
+  '/request-otp',
+  otpLimiter,
+  asyncHandler(async (req, res) => {
+    const { email } = emailSchema.parse(req.body);
+    const normalized = email.toLowerCase().trim();
+    await requestEmailOtp(normalized);
+
+    await recordAudit({
+      action: 'auth.request_otp',
+      entityType: 'Doctor',
+      req,
+    });
+
+    res.json({ sent: true });
+  }),
+);
+
+authRouter.post(
+  '/verify-otp',
   authLimiter,
   asyncHandler(async (req, res) => {
-    const { email, password } = loginSchema.parse(req.body);
-
-    const doctor = await authenticate(email, password);
+    const { email, token } = verifySchema.parse(req.body);
+    const doctor = await verifyEmailOtp(email.toLowerCase().trim(), token.trim());
 
     res.cookie(SESSION_COOKIE, signSession(doctor), sessionCookieOptions(SESSION_MAX_AGE_MS));
 

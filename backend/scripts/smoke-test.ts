@@ -1,7 +1,9 @@
 /**
  * End-to-end smoke test against a running API.
  *
- *   npm run smoke -- --email clinician@example.org --password "<from db:seed>"
+ * Sign in through the UI first (email code), copy the `cxr_session` cookie, then:
+ *
+ *   npm run smoke -- --cookie "cxr_session=..."
  *
  * Creates a throwaway patient, submits a generated test image for analysis, then
  * reviews and finalizes the report. Run it against a development database only: it
@@ -18,15 +20,14 @@ function arg(name: string): string | undefined {
   return index === -1 ? undefined : process.argv[index + 1];
 }
 
-const email = arg('email') ?? process.env.SMOKE_EMAIL;
-const password = arg('password') ?? process.env.SMOKE_PASSWORD;
+const cookieArg = arg('cookie') ?? process.env.SMOKE_COOKIE;
 
-if (!email || !password) {
-  console.error('Usage: npm run smoke -- --email <email> --password <password>');
+if (!cookieArg) {
+  console.error('Usage: npm run smoke -- --cookie "cxr_session=..."');
   process.exit(1);
 }
 
-let cookie = '';
+let cookie = cookieArg;
 
 async function call(path: string, init: RequestInit = {}): Promise<Response> {
   const response = await fetch(`${BASE_URL}${path}`, {
@@ -59,15 +60,6 @@ async function testImage(): Promise<Buffer> {
 
 async function main(): Promise<void> {
   console.log(`Smoke test against ${BASE_URL}\n`);
-
-  await expectOk(
-    await call('/api/auth/login', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ email, password }),
-    }),
-    'auth.login',
-  );
 
   await expectOk(await call('/api/auth/me'), 'auth.me');
 

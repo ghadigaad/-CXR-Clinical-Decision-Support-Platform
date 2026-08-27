@@ -1,183 +1,113 @@
-# Deploy a private demonstration
+# Hosting this demonstration
 
 This is a **demonstration**, not a clinical production system. Do not upload real
-patient images or protected health information. The hosted UI shows a persistent
-banner to that effect.
+patient images. Hosted copies show a persistent banner to that effect.
 
-Free Netlify / Render / Hugging Face / Supabase stacks are **not** HIPAA (or
-equivalent) covered environments, and the models are not cleared medical devices.
+**Do not commit secrets.** Put values only in the host dashboards or a local
+`.env` that is gitignored. This file uses placeholders only.
 
 ```
-Browser  →  Netlify (React)  →  /api proxy  →  Render (Express + Prisma)
-                                                  │
-                                                  ├─ Supabase Postgres
-                                                  ├─ HF Space: DenseNet (port 7860)
-                                                  └─ HF Space: EfficientNet (port 7860)
+Browser  →  static UI (Netlify or equivalent)  →  /api proxy  →  API host
+                                                                  ├─ Postgres (Supabase)
+                                                                  ├─ DenseNet process
+                                                                  └─ EfficientNet process
 ```
 
-Same-origin `/api` on Netlify keeps the httpOnly session cookie on
-`SameSite=strict`. Do not point `VITE_API_BASE_URL` at Render directly.
+The UI must call the API on the **same origin** (`/api`) so the session cookie
+stays `SameSite=strict`. Do not put a third-party API URL in the frontend bundle.
 
-## What you create (accounts on your machine)
+## Public access (do this in the dashboards)
 
-This machine does not have `gh` or `huggingface-cli`, and no hosting accounts
-are signed in. You will need:
+You commit and push; this repo does not store operator passwords.
 
-1. A GitHub repository for this project
-2. A Supabase project (Postgres)
-3. Two Hugging Face **Docker** Spaces
-4. A Render Web Service
-5. A Netlify site
+1. **GitHub** — Settings → General → Change repository visibility → **Public**.
+   Weights and `.env` files stay gitignored.
+2. **Netlify** — Project configuration → Access control / Visitor access → **Public**.
+   Turn off password protection and “team only”. Then trigger a deploy if
+   `API_PROXY_URL` was added after the first build.
+3. **Render** — Environment → `CORS_ORIGIN` = your Netlify origin
+   (`https://YOUR-SITE.netlify.app`, no trailing slash) → Manual Deploy.
+4. **Hugging Face Spaces** used for inference must be **Public** so the API can
+   reach them. The model HTTP API still requires the shared internal token
+   (set as a Space secret, never in git).
 
-Estimated time once accounts exist: 30–45 minutes, plus Space image builds.
-
-## 1. Put the project on GitHub
-
-From this folder (PowerShell):
-
-```powershell
-git init
-git add .
-git commit -m "Initial commit: CXR decision-support demo."
-```
-
-Then create an empty **private** GitHub repo in the browser and:
-
-```powershell
-git remote add origin https://github.com/YOUR_USER/YOUR_REPO.git
-git branch -M main
-git push -u origin main
-```
-
-Do not commit `.env` files, `*.pt`, or `*.keras` weights.
-
-Generate production secrets locally (do not reuse the local `.env` placeholders):
+## Secrets to generate (keep offline)
 
 ```powershell
 node -e "console.log(require('crypto').randomBytes(48).toString('hex'))"
 ```
 
-Run that twice. Save:
+Run twice:
 
-- `JWT_SECRET` — backend only
-- `INTERNAL_API_TOKEN` — backend **and both** Hugging Face Spaces (must match)
+- `JWT_SECRET` — API only
+- `INTERNAL_API_TOKEN` — API **and both** model processes (same value)
 
-## 2. Supabase Postgres
+Also copy from Supabase **Settings → API** (never paste them into git or the README):
 
-1. Create a project at [supabase.com](https://supabase.com).
-2. **Project Settings → Database → Connection string**.
-3. Copy two URLs:
-   - **Transaction pooler** (port `6543`, includes `pgbouncer=true`) → `DATABASE_URL`
-   - **Direct** (port `5432`, host `db.<project>.supabase.co`) → `DIRECT_URL`
-4. Append `?sslmode=require` if it is not already present.
-5. Leave the database empty. Prisma will create tables on first Render start.
+- `SUPABASE_URL`
+- `SUPABASE_SERVICE_ROLE_KEY` (server only)
 
-## 3. Hugging Face Spaces (two Docker spaces)
+## Supabase
 
-PyTorch and TensorFlow cannot share one image. Create **two** Spaces:
+**Database**
 
-| Space | SDK | Folder | Weights file |
-| ----- | --- | ------ | ------------ |
-| `cxr-densenet` | Docker | `ai-service/` | `weights/best_model.pt` |
-| `cxr-efficientnet` | Docker | `ai-service-tf/` | `weights/best_model_finetuned.keras` |
+1. Project Settings → Database → connection strings.
+2. Transaction pooler (port `6543`, `pgbouncer=true`) → `DATABASE_URL`.
+3. Session pooler (IPv4, port `5432` on `*.pooler.supabase.com`) → `DIRECT_URL`.
+   Do not use the `db.<ref>.supabase.co` host from IPv4-only platforms.
+4. Add `sslmode=require`.
 
-For each Space:
+**Email sign-in**
 
-1. New Space → **Docker** → private.
-2. Upload the contents of that folder (Dockerfile, `app/`, `requirements.txt`, `README.md`).
-3. **Files** tab: create `weights/` and upload the checkpoint (~28 MB DenseNet,
-   EfficientNet `.keras` similarly).
-4. **Settings → Secrets**: `INTERNAL_API_TOKEN` = the token from step 1.
-5. Wait until the Space is **Running**. Open `/health` (append `/health` to the
-   Space URL). You want `"model_loaded": true`.
+1. Authentication → Providers → Email → enable.
+2. Confirm the mail template includes the one-time code (`{{ .Token }}`).
+3. Authentication → URL configuration:
+   - Site URL: your public UI origin
+   - Redirect allow list: that origin and `http://localhost:5173`
+4. Free-tier mail is rate-limited. Add custom SMTP if you outgrow it.
 
-Space URLs look like:
+Anyone with an email can request a code. The API creates a clinician row on first
+successful verify. Password accounts and `db:seed` are not required for the demo.
 
-```
-https://YOUR_HF_USER-cxr-densenet.hf.space
-https://YOUR_HF_USER-cxr-efficientnet.hf.space
-```
+## Model processes
 
-The backend calls `/predict` on those origins. Hugging Face sleeps a free Space
-after 48 hours idle; the first request after sleep can take minutes and will
-exceed Netlify’s ~26 s proxy limit. Open each Space URL once to wake it before
-a demo, or upgrade the Space hardware.
+PyTorch and TensorFlow cannot share one image. Two Docker hosts (for example
+Hugging Face Docker Spaces, which currently need PRO):
 
-## 4. Render API
+| Process | Folder | Weights (upload; do not commit) |
+| --- | --- | --- |
+| DenseNet-121 + CBAM | `ai-service/` | `weights/best_model.pt` |
+| EfficientNetV2-B0 | `ai-service-tf/` | `weights/best_model_finetuned.keras` |
 
-1. New **Web Service** from the GitHub repo (or apply `render.yaml`).
-2. Root directory: `backend`.
-3. Build: `npm run prepare:prisma && npm install && npx prisma generate && npm run build`
-4. Start: `npx prisma db push && npm start`
-5. Environment:
+Secret on each: `INTERNAL_API_TOKEN`. After boot, `GET /health` should show
+`model_loaded: true`. Point the API at those origins with `AI_SERVICE_URL` and
+`AI_EFFICIENTNET_URL` (no path suffix).
 
-| Key | Value |
-| --- | ----- |
-| `NODE_ENV` | `production` |
-| `PRISMA_PROVIDER` | `postgresql` |
-| `DATABASE_URL` | Supabase pooler URL |
-| `DIRECT_URL` | Supabase direct URL |
-| `JWT_SECRET` | from step 1 |
-| `INTERNAL_API_TOKEN` | from step 1 |
-| `AI_PROVIDER` | `real` |
-| `AI_SERVICE_URL` | `https://YOUR_HF_USER-cxr-densenet.hf.space` |
-| `AI_EFFICIENTNET_URL` | `https://YOUR_HF_USER-cxr-efficientnet.hf.space` |
-| `CORS_ORIGIN` | your Netlify URL (`https://….netlify.app`) — set this **after** step 5 if needed, then redeploy |
-| `COOKIE_SECURE` | `true` |
-| `AI_REQUEST_TIMEOUT_MS` | `25000` |
-| `STORE_ORIGINAL_IMAGES` | `false` |
+## API host (Render or equivalent)
 
-6. After the first successful deploy, open a Render **Shell** once:
+- Root: `backend`
+- Build: `npm install --include=dev && npm run render:build`
+- Start: `npx prisma db push && npm start`
+- Also set: `NODE_ENV=production`, `PRISMA_PROVIDER=postgresql`, `COOKIE_SECURE=true`,
+  `NPM_CONFIG_PRODUCTION=false`, `AI_PROVIDER=real`, `AI_REQUEST_TIMEOUT_MS=25000`,
+  `STORE_ORIGINAL_IMAGES=false`, plus the secrets listed above.
 
-```bash
-npm run db:seed
-```
-
-Save the printed email and password. They are not stored in the repo.
-
-Render’s free/starter instances sleep after idle time. Wake the service (open
-`/api/system/health`) before a demo.
-
-## 5. Netlify frontend
-
-1. New site from Git → this repo.
-2. Base directory: `frontend` (or leave blank and rely on `netlify.toml`).
-3. Environment variables:
+## Static UI (Netlify or equivalent)
 
 | Key | Value |
-| --- | ----- |
-| `API_PROXY_URL` | Render origin, e.g. `https://cxr-api.onrender.com` (no trailing slash, no `/api`) |
+| --- | --- |
+| `API_PROXY_URL` | API origin, `https://YOUR-API.example`, no `/api` |
 | `VITE_DEMO_MODE` | `true` |
 | `VITE_API_BASE_URL` | empty |
 
-4. Deploy. Copy the Netlify URL.
-5. Set `CORS_ORIGIN` on Render to that URL and trigger a Render redeploy.
+`netlify.toml` writes same-origin `/api` rewrites at build time.
 
-Confirm in the browser (not `127.0.0.1`):
+## Cold starts
 
-- Login works and the demo banner is visible
-- Settings shows both models once the Spaces are awake
-- A **sample** (non-patient) X-ray analyzes on each model
+Idle free API and model hosts sleep. The first analysis after sleep can exceed
+a short HTTP proxy timeout. Wake the API health URL and both model `/health`
+endpoints before a demo.
 
-## Cold starts (the usual failure)
+## What this is not
 
-| Hop | Idle behaviour | Typical first-hit delay |
-| --- | -------------- | ----------------------- |
-| Netlify rewrite | none | — |
-| Render free/starter | sleeps ~15 min | 30–60 s |
-| HF Space CPU | sleeps after 48 h | 1–3 min |
-
-Netlify’s proxy gives up around **26 seconds**. A cold Hugging Face Space will
-look like a failed analysis even when the app is fine. Wake Render and both
-Spaces, then retry.
-
-## What this deploy is not
-
-- Not a medical device clearance
-- Not a HIPAA / BAA hosting stack
-- Not suitable for real patient data
-- Not highly available (sleeping free tiers)
-
-For a real clinic you would need a BAA-covered host, a single always-on GPU or
-CPU box for both models, Postgres backups, and a regulatory review. A $5–12/mo
-VPS running `docker compose` is often simpler than four free SaaS sleep cycles.
+Not a medical device clearance, not a HIPAA/BAA stack, not for real PHI.

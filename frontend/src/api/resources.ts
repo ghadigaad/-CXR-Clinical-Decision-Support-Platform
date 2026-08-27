@@ -39,8 +39,9 @@ function toQueryString(params: object): string {
 /* --------------------------------- Auth ---------------------------------- */
 
 export const authApi = {
-  login: (email: string, password: string) =>
-    api.post<{ doctor: Doctor }>('/api/auth/login', { email, password }),
+  requestOtp: (email: string) => api.post<{ sent: boolean }>('/api/auth/request-otp', { email }),
+  verifyOtp: (email: string, token: string) =>
+    api.post<{ doctor: Doctor }>('/api/auth/verify-otp', { email, token }),
   logout: () => api.post<{ success: boolean }>('/api/auth/logout'),
   me: () => api.get<{ doctor: Doctor }>('/api/auth/me'),
 };
