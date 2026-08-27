@@ -42,6 +42,8 @@ export const authApi = {
   requestOtp: (email: string) => api.post<{ sent: boolean }>('/api/auth/request-otp', { email }),
   verifyOtp: (email: string, token: string) =>
     api.post<{ doctor: Doctor }>('/api/auth/verify-otp', { email, token }),
+  completeLink: (body: { accessToken?: string; tokenHash?: string; type?: 'email' | 'magiclink' }) =>
+    api.post<{ doctor: Doctor }>('/api/auth/session', body),
   logout: () => api.post<{ success: boolean }>('/api/auth/logout'),
   me: () => api.get<{ doctor: Doctor }>('/api/auth/me'),
 };

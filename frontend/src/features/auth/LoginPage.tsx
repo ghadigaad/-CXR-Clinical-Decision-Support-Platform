@@ -37,7 +37,7 @@ export function LoginPage() {
   const emailForm = useForm<EmailValues>({ resolver: zodResolver(emailSchema) });
   const codeForm = useForm<CodeValues>({ resolver: zodResolver(codeSchema) });
 
-  if (isLoading) return <LoadingState label="Checking your session" />;
+  if (isLoading) return <LoadingState label="Signing you in" />;
   if (doctor) return <Navigate to="/" replace />;
 
   const from = (location.state as { from?: string } | null)?.from ?? '/';
@@ -81,7 +81,8 @@ export function LoginPage() {
           </div>
           <h1 className="mt-4 text-xl font-semibold text-slate-900">CXR Decision Support</h1>
           <p className="mt-1 text-sm text-slate-500">
-            Sign in with your email. We will send a one-time code.
+            Sign in with your email. Open the message and click <strong>Sign in</strong>, or enter a
+            code if the email includes one.
           </p>
         </div>
 
@@ -97,8 +98,9 @@ export function LoginPage() {
               {formError ? <Alert tone="danger">{formError}</Alert> : null}
               <Alert tone="info" title="Check your inbox">
                 <p>
-                  A sign-in code was sent to <strong>{sentTo}</strong>. It may take a minute, and
-                  it can land in spam. Demo only — not for clinical use.
+                  We emailed <strong>{sentTo}</strong>. Click <strong>Sign in</strong> in that
+                  message (it can land in spam). If the email also shows a 6-digit code, you can
+                  type it here instead.
                 </p>
               </Alert>
               <TextField

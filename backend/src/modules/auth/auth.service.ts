@@ -55,31 +55,8 @@ function displayNameFromEmail(email: string): string {
   return spaced.replace(/\b\w/g, (char) => char.toUpperCase());
 }
 
-export async function requestEmailOtp(email: string): Promise<void> {
-  const { error } = await supabaseAdmin.auth.signInWithOtp({
-    email,
-    options: { shouldCreateUser: true },
-  });
-
-  if (error) {
-    throw unauthorized(
-      'Could not send a sign-in code. Check the address and try again in a few minutes.',
-    );
-  }
-}
-
-export async function verifyEmailOtp(email: string, token: string): Promise<Doctor> {
-  const { data, error } = await supabaseAdmin.auth.verifyOtp({
-    email,
-    token,
-    type: 'email',
-  });
-
-  if (error || !data.user?.email) {
-    throw unauthorized('That code is invalid or has expired. Request a new one.');
-  }
-
-  const normalized = data.user.email.toLowerCase().trim();
+async function upsertDoctorFromEmail(email: string): Promise<Doctor> {
+  const normalized = email.toLowerCase().trim();
 
   const doctor = await prisma.doctor.upsert({
     where: { email: normalized },
@@ -99,4 +76,66 @@ export async function verifyEmailOtp(email: string, token: string): Promise<Doct
   }
 
   return doctor;
+}
+
+function publicAppOrigin(): string {
+  return env.CORS_ORIGIN.split(',')[0]?.trim() || 'http://localhost:5173';
+}
+
+export async function requestEmailOtp(email: string): Promise<void> {
+  const { error } = await supabaseAdmin.auth.signInWithOtp({
+    email,
+    options: {
+      shouldCreateUser: true,
+      emailRedirectTo: publicAppOrigin(),
+    },
+  });
+
+  if (error) {
+    throw unauthorized(
+      'Could not send a sign-in email. Check the address and try again in a few minutes.',
+    );
+  }
+}
+
+export async function verifyEmailOtp(email: string, token: string): Promise<Doctor> {
+  const { data, error } = await supabaseAdmin.auth.verifyOtp({
+    email,
+    token,
+    type: 'email',
+  });
+
+  if (error || !data.user?.email) {
+    throw unauthorized('That code is invalid or has expired. Request a new one.');
+  }
+
+  return upsertDoctorFromEmail(data.user.email);
+}
+
+/** Completes a magic-link click (`#access_token=` on the site URL). */
+export async function completeSessionFromAccessToken(accessToken: string): Promise<Doctor> {
+  const { data, error } = await supabaseAdmin.auth.getUser(accessToken);
+
+  if (error || !data.user?.email) {
+    throw unauthorized('That sign-in link is invalid or has expired. Request a new email.');
+  }
+
+  return upsertDoctorFromEmail(data.user.email);
+}
+
+/** Completes a verify link (`?token_hash=&type=`). */
+export async function completeSessionFromTokenHash(
+  tokenHash: string,
+  type: 'email' | 'magiclink' = 'email',
+): Promise<Doctor> {
+  const { data, error } = await supabaseAdmin.auth.verifyOtp({
+    token_hash: tokenHash,
+    type,
+  });
+
+  if (error || !data.user?.email) {
+    throw unauthorized('That sign-in link is invalid or has expired. Request a new email.');
+  }
+
+  return upsertDoctorFromEmail(data.user.email);
 }

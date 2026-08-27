@@ -12,7 +12,14 @@ import {
   sessionCookieOptions,
 } from '../../middleware/auth.js';
 import { authLimiter, otpLimiter } from '../../middleware/rateLimit.js';
-import { requestEmailOtp, signSession, toPublicDoctor, verifyEmailOtp } from './auth.service.js';
+import {
+  completeSessionFromAccessToken,
+  completeSessionFromTokenHash,
+  requestEmailOtp,
+  signSession,
+  toPublicDoctor,
+  verifyEmailOtp,
+} from './auth.service.js';
 
 const SESSION_MAX_AGE_MS = 8 * 60 * 60 * 1000;
 
@@ -27,6 +34,16 @@ const verifySchema = z.object({
     .trim()
     .regex(/^\d{6,8}$/, 'Enter the code from your email.'),
 });
+
+const linkSchema = z
+  .object({
+    accessToken: z.string().min(20).optional(),
+    tokenHash: z.string().min(8).optional(),
+    type: z.enum(['email', 'magiclink']).optional(),
+  })
+  .refine((value) => Boolean(value.accessToken || value.tokenHash), {
+    message: 'Sign-in token is missing.',
+  });
 
 export const authRouter = Router();
 
@@ -54,6 +71,29 @@ authRouter.post(
   asyncHandler(async (req, res) => {
     const { email, token } = verifySchema.parse(req.body);
     const doctor = await verifyEmailOtp(email.toLowerCase().trim(), token.trim());
+
+    res.cookie(SESSION_COOKIE, signSession(doctor), sessionCookieOptions(SESSION_MAX_AGE_MS));
+
+    await recordAudit({
+      doctorId: doctor.id,
+      action: 'auth.login',
+      entityType: 'Doctor',
+      entityId: doctor.id,
+      req,
+    });
+
+    res.json({ doctor: toPublicDoctor(doctor) });
+  }),
+);
+
+authRouter.post(
+  '/session',
+  authLimiter,
+  asyncHandler(async (req, res) => {
+    const body = linkSchema.parse(req.body);
+    const doctor = body.accessToken
+      ? await completeSessionFromAccessToken(body.accessToken)
+      : await completeSessionFromTokenHash(body.tokenHash as string, body.type ?? 'email');
 
     res.cookie(SESSION_COOKIE, signSession(doctor), sessionCookieOptions(SESSION_MAX_AGE_MS));
 
